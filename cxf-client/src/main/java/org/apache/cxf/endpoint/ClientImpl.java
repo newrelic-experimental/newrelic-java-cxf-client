@@ -12,15 +12,15 @@ import org.apache.cxf.transport.Destination;
 import org.apache.cxf.ws.addressing.AttributedURIType;
 import org.apache.cxf.ws.addressing.EndpointReferenceType;
 
-import com.newrelic.agent.bridge.AgentBridge;
-import com.newrelic.agent.bridge.TracedMethod;
-import com.newrelic.agent.bridge.external.ExternalParameters;
-import com.newrelic.agent.bridge.external.ExternalParametersFactory;
+import com.newrelic.api.agent.ExternalParameters;
+import com.newrelic.api.agent.HttpParameters;
+import com.newrelic.api.agent.NewRelic;
 import com.newrelic.api.agent.Trace;
+import com.newrelic.api.agent.TracedMethod;
+import com.newrelic.api.agent.TransportType;
 import com.newrelic.api.agent.weaver.Weave;
 import com.newrelic.api.agent.weaver.Weaver;
-import com.nr.instrumentation.field.cxf.InboundWrapper;
-import com.nr.instrumentation.field.cxf.OutboundWrapper;
+import com.newrelic.instrumentation.labs.cxf.CXFHeaders;
 
 @Weave
 public abstract class ClientImpl {
@@ -28,16 +28,16 @@ public abstract class ClientImpl {
 	@Trace
 	private Object[] doInvoke(ClientCallback callback, BindingOperationInfo oi, Object[] params, Map<String, Object> context, Exchange exchange) {
 		if(callback != null) {
-			callback.token = AgentBridge.getAgent().getTransaction().getToken();
+			callback.token = NewRelic.getAgent().getTransaction().getToken();
 		}
 		
-		OutboundWrapper outWrapper = null;
+		CXFHeaders outWrapper = null;
 		if(context != null) {
-			outWrapper = new OutboundWrapper(context);
+			outWrapper = new CXFHeaders(context);
 		} else {
-			outWrapper = new OutboundWrapper(exchange);
+			outWrapper = new CXFHeaders(exchange);
 		}
-		AgentBridge.getAgent().getTransaction().getCrossProcessState().processOutboundRequestHeaders(outWrapper);
+		NewRelic.getAgent().getTransaction().insertDistributedTraceHeaders(outWrapper);
 		if (exchange != null) {
 			Destination dest = exchange.getDestination();
 			URI theURI = null;
@@ -51,26 +51,26 @@ public abstract class ClientImpl {
 							try {
 								theURI = new URI(uriStr);
 							} catch (URISyntaxException e) {
-								AgentBridge.getAgent().getLogger().log(Level.FINER,e,"Exception getting URI from {0}",new Object[] { uriStr });
+								NewRelic.getAgent().getLogger().log(Level.FINER,e,"Exception getting URI from {0}",new Object[] { uriStr });
 							}
 						}
 					}
 				}
 			}
 			if (theURI != null) {
-				ExternalParameters extParams = ExternalParametersFactory.createForHttp("CXF-Client", theURI, "invoke");
-				AgentBridge.getAgent().getTracedMethod().reportAsExternal(extParams);
+				ExternalParameters extParams = HttpParameters.library("CXF-Client").uri(theURI).procedure("invoke").noInboundHeaders().build();
+				NewRelic.getAgent().getTracedMethod().reportAsExternal(extParams);
 			}
 		} else {
-			AgentBridge.getAgent().getLogger().log(Level.FINE, "input exchange object is null");
+			NewRelic.getAgent().getLogger().log(Level.FINE, "input exchange object is null");
 		}
 		return Weaver.callOriginal();
 	}
 	
 	@Trace
 	protected Object[] processResult(Message message, Exchange exchange, BindingOperationInfo oi, Map<String, Object> resContext) {
-		InboundWrapper wrapper = new InboundWrapper(resContext);
-		TracedMethod traced = AgentBridge.getAgent().getTracedMethod();
+		CXFHeaders wrapper = new CXFHeaders(resContext);
+		TracedMethod traced = NewRelic.getAgent().getTracedMethod();
 		Destination dest = exchange.getDestination();
 		String uri = null;
 		String host = null;
@@ -86,7 +86,7 @@ public abstract class ClientImpl {
 							uri = theURI.getPath();
 							host = theURI.getHost();
 						} catch (URISyntaxException e) {
-							AgentBridge.getAgent().getLogger().log(Level.FINER, e, "Exception getting URI from {0}",  new Object[] {uriStr});
+							NewRelic.getAgent().getLogger().log(Level.FINER, e, "Exception getting URI from {0}",  new Object[] {uriStr});
 						}
 					}
 				}
@@ -98,7 +98,9 @@ public abstract class ClientImpl {
 		if(uri == null) {
 			uri = "UnknownPath";
 		}
-		AgentBridge.getAgent().getTransaction().getCrossProcessState().processInboundResponseHeaders(wrapper, traced, host, uri, false);
+		traced.addCustomAttribute("Host", host);
+		traced.addCustomAttribute("URI", uri);
+		NewRelic.getAgent().getTransaction().acceptDistributedTraceHeaders(TransportType.HTTP, wrapper);
 		return Weaver.callOriginal();
 	}
 }

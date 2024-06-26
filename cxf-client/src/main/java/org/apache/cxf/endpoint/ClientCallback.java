@@ -2,14 +2,14 @@ package org.apache.cxf.endpoint;
 
 import java.util.Map;
 
-import com.newrelic.agent.bridge.AgentBridge;
-import com.newrelic.agent.bridge.Token;
-import com.newrelic.agent.bridge.TracedMethod;
+import com.newrelic.api.agent.NewRelic;
+import com.newrelic.api.agent.Token;
 import com.newrelic.api.agent.Trace;
+import com.newrelic.api.agent.TransportType;
 import com.newrelic.api.agent.weaver.NewField;
 import com.newrelic.api.agent.weaver.Weave;
 import com.newrelic.api.agent.weaver.Weaver;
-import com.nr.instrumentation.field.cxf.InboundWrapper;
+import com.newrelic.instrumentation.labs.cxf.CXFHeaders;
 
 @Weave(originalName="org.apache.cxf.endpoint.ClientCallback")
 public abstract class ClientCallback {
@@ -22,11 +22,8 @@ public abstract class ClientCallback {
 		if(token != null) {
 			token.linkAndExpire();
 		}
-		InboundWrapper wrapper = new InboundWrapper(ctx);
-		TracedMethod traced = AgentBridge.getAgent().getTracedMethod();
-		String host = "UnknownHost";
-		String uri = "/Unknown";
-		AgentBridge.getAgent().getTransaction().getCrossProcessState().processInboundResponseHeaders(wrapper, traced, host, uri, false);
+		CXFHeaders wrapper = new CXFHeaders(ctx);
+		NewRelic.getAgent().getTransaction().acceptDistributedTraceHeaders(TransportType.HTTP, wrapper);
 		Weaver.callOriginal();
 	}
 }
