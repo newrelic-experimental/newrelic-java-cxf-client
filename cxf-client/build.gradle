@@ -5,12 +5,11 @@ apply plugin: 'java'
 
 dependencies {
    implementation 'org.apache.cxf:cxf-rt-core:2.5.9'
- //  implementation 'org.apache.cxf:cxf-core:3.0.0'
-   
 
    // New Relic Java Agent dependencies
-   implementation 'com.newrelic.agent.java:newrelic-api:7.4.0'
-   implementation fileTree(include: ['*.jar'], dir: '../libs')
+   implementation 'com.newrelic.agent.java:newrelic-agent:' + project.findProperty('java.agent.version')
+   implementation 'com.newrelic.agent.java:newrelic-api:' + project.findProperty('java.agent.version')
+   implementation 'com.newrelic.agent.java:agent-bridge:' + project.findProperty('java.agent.version')
    implementation fileTree(include: ['*.jar'], dir: '../test-lib')
 }
 
@@ -24,6 +23,7 @@ jar {
 }
 
 verifyInstrumentation {
-  passes 'org.apache.cxf:cxf-rt-core:[2.5.9,)'
-  passes 'org.apache.cxf:cxf-core:[3.0.0,)'
+  passesOnly 'org.apache.cxf:cxf-rt-core:[2.4.0,)'
+  passesOnly 'org.apache.cxf:cxf-core:[3.0.0,)'
+  excludeRegex '.*milestone.*'
 }
